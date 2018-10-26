@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="utf-8">
+        <title>API-Server Example - Client</title>
+        <script type="text/javascript">
+            function onload(){
+                info   = document.getElementById('info');
+                time   = document.getElementById('time');
+                user   = document.getElementById('user');
+                server = document.getElementById('server');
+                btn    = document.getElementById('connect');
+                title  = document.getElementById('title');
+                msgs   = document.getElementById('messages');
+                msg    = document.getElementById('message');
+                sender = document.getElementById('send');
+                list   = document.getElementById('list');
+            }
+            var websocket = undefined;
+            var chatID    = undefined;
+            var info, time, user, server, btn, title, msgs, msg, sender, list;
+            function connect(){
+                if(websocket) return;
+                if(user.value == '' || user.value === undefined){
+                    user.classList = 'error';
+                    setTimeout(function(){
+                        user.classList = '';
+                    }, 3000);
+                    return;
+                }
+                websocket        = new WebSocket(server.value);
+                websocket.onopen = function(){
+                    msgs.innerHTML += "<li class='seperator good'>Connected</li>";
+                    msgs.scrollTop  = msgs.scrollTopMax;
+                    user.disabled   = true;
+                    server.disabled = true;
+                    btn.innerText   = 'Disconnect';
+                    btn.classList   = 'disconnect';
+                    btn.onclick     = function(){
+                        var close = {command: 'close'};
+                        websocket.send(JSON.stringify(close));
+                        websocket.close();
+                    }
+                    var command     = {command: 'user', user: user.value};
+                    websocket.send(JSON.stringify(command));
+                    command         = {command: 'server', type: 'info'};
+                    websocket.send(JSON.stringify(command));
+                    command         = {command: 'server', type: 'time'};
+                    websocket.send(JSON.stringify(command));
+                    command         = {command: 'chat', type: 'list'};
+                    websocket.send(JSON.stringify(command));
+                }
+                websocket.onclose = function(){
+                    list.innerHTML  = 'Not connected';
+                    title.innerHTML = 'Not connected';
+                    info.innerHTML  = 'Not connected';
+                    time.innerHTML  = 'Not connected';
+                    msgs.innerHTML += "<li class='seperator error'>Disconnected</li>";
+                    msgs.scrollTop  = msgs.scrollTopMax;
+                    user.disabled   = false;
+                    server.disabled = false;
+                    btn.innerText   = 'Connect';
+                    btn.classList   = '';
+                    btn.onclick     = function(){
+                        connect();
+                    }
+                    websocket = undefined;
+                    chatID    = undefined;
+                }
+                websocket.onerror = function(){
+                    websocket.close();
+                }
+                websocket.onmessage = function(event){
+                    try {
+                        var command = JSON.parse(event.data);
+                        switch (command.command) {
+                            case 'error':
+                                msgs.innerHTML += "<li class='seperator error'>Error: "+command.message+"</li>";
+                                break;
+                            case 'chat':
+                                switch (command.type) {
+                                    case 'new':
+                                        msgs.innerHTML += "<li class='message in'><span class='sender'>"+command.sender+":</span><div class='body'>"+command.message+"</div></li>";
+                                        msgs.scrollTop  = msgs.scrollTopMax;
+                                        break;
+                                    case 'list':
+                                        list.innerHTML = "<li onclick='setChatID(this);' title='This will broadcast the message to all clients'>Broadcast</li>";;
+                                        for (var i = 0; i < command.list.length; i++) {
+                                            list.innerHTML += "<li onclick='setChatID(this);' data-id='"+command.list[i]+"'>"+command.list[i]+"</li>";
+                                        }
+                                        break;
+                                }
+                                break;
+                            case 'server':
+                                switch (command.type) {
+                                    case 'info':
+                                        info.innerText = command.info;
+                                        break;
+                                    case 'time':
+                                        time.innerText = command.time;
+                                        break;
+                                }
+                                break;
+                        }
+                    } catch (e) {
+                        msgs.innerHTML += "<li class='seperator error'>There was an error with a message received</li>";
+                    }
+                }
+            }
+            function checkSend(e){
+                if(e.value.length > 0) sender.disabled = false;
+                else sender.disabled = false;
+            }
+            function enterSend(e){
+                var code = (e.keyCode ? e.keyCode : e.which);
+                if(code == 13){
+                    e.preventDefault();
+                    send();
+                }
+            }
+            function send(){
+                if(websocket === undefined || msg.value == '') return;
+                var text        = {command: 'chat', type: 'send', message: msg.value, to: chatID};
+                msgs.innerHTML += "<li class='message out'><span class='sender'>You:</span><div class='body'>"+msg.value+"</div></li>";
+                msgs.scrollTop  = msgs.scrollTopMax;
+                websocket.send(JSON.stringify(text));
+                msg.value       = '';
+                msg.focus();
+            }
+            function setChatID(e){
+                chatID = e.getAttribute('data-id');
+                title.innerHTML = (chatID !== undefined && chatID != null) ? "Chatting with "+chatID : "Broadcasting";
+            }
+        </script>
+        <style>
+            html, body {
+                position: relative;
+                height: 100%;
+                width: 100%;
+                padding: 0;
+                margin: 0;
+                font-size: 16px;
+                overflow: hidden;
+            }
+            * {
+                transition: all .4s ease-in-out;
+                -webkit-box-sizing: border-box;
+                -moz-box-sizing: border-box;
+                box-sizing: border-box;
+            }
+            .server {
+                position: relative;
+                z-index: 2;
+                width: 100%;
+                height: 8%;
+                font-size: 1.5em;
+                box-shadow: 0 0 6px #000;
+            }
+            .server > * {
+                display: inline-block;
+                height: 100%;
+                padding: 5px;
+                text-align: center;
+                width: auto;
+            }
+            .server > #info {
+                margin-left: 25%;
+            }
+            .server > #time {
+                float: right;
+                margin-right: 25%;
+            }
+            .controls, .view {
+                position: relative;
+                float: left;
+                height: 92%;
+                padding: 15px 5px;
+            }
+            .controls {
+                width: 20%;
+                box-shadow: 0 6px 6px #000;
+            }
+            .controls > *:not(#list) {
+                width: 80%;
+                margin-left: 10%;
+                margin-bottom: 10px;
+            }
+            .controls > input {
+                font-size: 1.2em;
+                background: #fff;
+                color: #000;
+                border: none;
+                border-bottom: #ccc 2px solid;
+            }
+            .controls > input.error {
+                color: red;
+                border-color: red;
+            }
+            .controls > input:focus, .controls > input:hover {
+                border-color: green;
+            }
+            .controls > button {
+                cursor: pointer;
+                background: #229e22;
+                border: #26d726 2px solid;
+                border-radius: 5px;
+                font-size: 1.5em;
+            }
+            .controls > button:not(.disconnect):hover {
+                background: #26a700;
+                border: #229e22 2px solid;
+            }
+            .controls > .disconnect {
+                background: #d43f3a;
+                border-color: #ccc;
+            }
+            .controls > .disconnect:hover {
+                border-color: red;
+            }
+            .controls > #list {
+                width: 100%;
+                border-top: #d5d5d5 2px solid;
+                padding: 5px 0;
+                overflow-y: auto;
+                height: 75%;
+            }
+            .controls > #list > li {
+                cursor: pointer;
+                font-size: 1.2em;
+                width: 100%;
+                height: 35px;
+                padding: 5px;
+            }
+            .controls > #list > li:hover {
+                background: #666;
+                color: #fff;
+            }
+            .view {
+                width: 80%;
+                padding: 0;
+            }
+            .view > #title {
+                text-align: center;
+                padding: 5px;
+                width: 100%;
+                height: 7.5%;
+                font-size: 1.5em;
+            }
+            .view > #messages {
+                width: 100%;
+                height: 72.5%;
+                padding: 5px 0;
+                box-shadow: 0 0 9px #000 inset;
+                overflow-y: auto;
+            }
+            .view > #messages > li {
+                position: relative;
+                float: left;
+                list-style: none;
+                display: block;
+                font-size: 1.2em;
+                width: 75%;
+            }
+            .view > #messages > .seperator {
+                margin-top: 10px;
+                text-align: center;
+                width: 40%;
+                margin-left: 30%;
+                margin-bottom: 5px;
+                border-bottom: #999 2px solid;
+            }
+            .view > #messages > .good {
+                color: green;
+                border-color: green;
+            }
+            .view > #messages > .error {
+                color: red;
+                border-color: red;
+            }
+            .view > #messages > .message {
+                position: relative;
+                display: block;
+                float: right;
+                font-size: 1.2em;
+                background: #3e82bc;
+                color: #fff;
+                width: 75%;
+                padding: 5px;
+                border-radius: 15px 0 0 15px;
+                margin-bottom: 5px;
+            }
+            .view > #messages > .message.in {
+                float: left;
+                background: #aaa;
+                color: #000;
+                border-radius: 0 15px 15px 0;
+            }
+            .view > #messages > .message > * {
+                position: relative;
+                float: left;
+                margin-left: 5px;
+            }
+            .view > #message, .view > #send {
+                position: relative;
+                float: left;
+                height: 20%;
+            }
+            .view > #message {
+                width: 85%;
+                resize: none;
+                background: #ccc;
+                color: black;
+                border: #666 2px solid;
+                border-radius: 10px;
+                padding: 5px;
+                font-size: 1.2em;
+            }
+            .view > #send {
+                cursor: pointer;
+                width: 15%;
+                background: #229e22;
+                border: #26d726 2px solid;
+                border-radius: 15px;
+                font-size: 1.5em;
+            }
+            .view > #send:hover {
+                background: #26a700;
+                border: #229e22 2px solid;
+            }
+        </style>
+    </head>
+    <body onload="onload();">
+        <div class="server">
+            <div id="info" title="Server's info">
+                Not connected
+            </div>
+            <div id="time" title="Server's time">
+                Not connected
+            </div>
+        </div>
+        <div class="controls">
+            <input id="user" placeholder="Your name..." min="4" max="10" />
+            <input id="server" value="ws://localhost:8080" placeholder="Server address..." />
+            <button id='connect' onclick="connect();">Connect</button>
+            <div id="list">
+                Not connected
+            </div>
+        </div>
+        <div class="view">
+            <div id="title">Not connected</div>
+            <div id="messages"></div>
+            <textarea id="message" onchange="checkSend(this);" onkeydown="enterSend(event);" placeholder="Type a message..."></textarea>
+            <button id="send" onclick="send();">Send</button>
+        </div>
+    </body>
+</html>
